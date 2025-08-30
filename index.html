@@ -101,6 +101,10 @@
                 <button id="export-btn" class="text-gray-500 hover:text-gray-800">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
+                <label for="upload-csv" class="cursor-pointer text-gray-500 hover:text-gray-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <input type="file" id="upload-csv" accept=".csv" class="hidden">
+                </label>
                 <img src="https://placehold.co/40x40/E2D9FF/6D28D9?text=U" class="rounded-full" alt="User Avatar">
             </div>
         </header>
@@ -207,18 +211,18 @@
                     <div id="stats-content">
                         <div class="flex justify-between items-start mb-4">
                            <h3 class="font-semibold text-lg text-gray-800">Spending Breakdown</h3>
-                            <button id="gemini-insight-btn" class="btn btn-primary !py-2 !px-4 text-sm flex items-center gap-2">
-                               ✨ Get Smart Insights
-                            </button>
+                        <button id="gemini-insight-btn" class="btn btn-primary !py-2 !px-4 text-sm flex items-center gap-2">
+                           ✨ Get Smart Insights
+                        </button>
+                    </div>
+                    <div class="flex flex-col md:flex-row gap-8 items-center">
+                        <div class="w-full md:w-1/2">
+                           <canvas id="expenseChart"></canvas>
                         </div>
-                        <div class="flex flex-col md:flex-row gap-8 items-center">
-                            <div class="w-full md:w-1/2">
-                               <canvas id="expenseChart"></canvas>
-                            </div>
-                            <div id="cost-suggestions" class="w-full md:w-1/2 space-y-3">
-                                <p class="text-gray-600">Add some expenses to see your spending breakdown.</p>
-                            </div>
+                        <div id="cost-suggestions" class="w-full md:w-1/2 space-y-3">
+                            <p class="text-gray-600">Add some expenses to see your spending breakdown.</p>
                         </div>
+                    </div>
                     </div>
 
                     <div id="emis-content" class="hidden">
@@ -267,6 +271,7 @@
             const emiFields = document.getElementById('emi-fields');
             const expenseCategoryField = document.getElementById('expense-category-field');
             const exportBtn = document.getElementById('export-btn');
+            const uploadCsvInput = document.getElementById('upload-csv');
             const geminiBtn = document.getElementById('gemini-insight-btn');
             const geminiEmiBtn = document.getElementById('gemini-emi-insight-btn');
             const suggestionsContainer = document.getElementById('cost-suggestions');
@@ -321,7 +326,7 @@
             }
             modalOk.addEventListener('click', () => { hideModal(); if (confirmResolve) confirmResolve(true); });
             modalCancel.addEventListener('click', () => { hideModal(); if (confirmResolve) confirmResolve(false); });
-            
+
             // --- Tab Switching Logic ---
             statsTabBtn.addEventListener('click', () => {
                 statsTabBtn.classList.add('text-gray-800', 'border-purple-600');
@@ -342,7 +347,22 @@
                 statsContent.classList.add('hidden');
                 renderEmiInsights();
             });
+            
+            // --- EMI Auto-calculation ---
+            function updateEmiFields() {
+                if (typeSelect.value !== 'emi') return;
 
+                const months = parseInt(emiMonths.value);
+                const amount = parseFloat(amountInput.value);
+                const activeEl = document.activeElement;
+
+                if (!months && !amount) return;
+
+                // With total amount removed, the user explicitly sets either months or amount
+                // No auto-calculation between amount and months is needed directly
+            }
+            emiMonths.addEventListener('input', updateEmiFields);
+            amountInput.addEventListener('input', updateEmiFields);
 
             // --- Form & State Logic ---
             typeSelect.addEventListener('change', () => {
@@ -457,7 +477,7 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <p class="font-bold text-lg ${amountColor} text-right">${amountSign}₹${item.amount.toFixed(2)}</p>
+                        <p class="font-bold text-lg ${amountColor} text-right">${amountSign}₹${item.amount.toFixed(2)}</p>
                             <button class="btn-danger delete-btn" data-id="${item.id}" data-type="${item.type}s">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
@@ -504,25 +524,22 @@
                     return;
                 }
 
-                const categorySpending = state.expenses.reduce((acc, expense) => {
-                    acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
-                    return acc;
-                }, {});
+                const categorySpending = state.expenses.reduce((acc, expense) => { (acc[expense.category] = (acc[expense.category] || 0) + expense.amount); return acc; }, {});
                 
                 const sortedCategories = Object.entries(categorySpending).sort(([, a], [, b]) => b - a);
                 
                 if (!suggestionsContainer.querySelector('ul')) {
-                    suggestionsContainer.innerHTML = '<h3 class="font-semibold text-lg text-gray-800 mb-2">Top Spending:</h3>';
-                    const suggestionsList = document.createElement('ul');
-                    suggestionsList.className = 'space-y-3';
-                    sortedCategories.slice(0, 3).forEach(([category, amount]) => {
-                        const li = document.createElement('li');
-                        li.className = 'flex items-center text-gray-700';
-                        const iconInfo = categoryIcons[category] || categoryIcons['Other'];
-                        li.innerHTML = `<div class="icon-bg !w-8 !h-8 mr-3 ${iconInfo.color}">${iconInfo.svg.replace('width="24"','width="20"').replace('height="24"','height="20"')}</div> <span class="font-medium">${category}:</span> <span class="ml-auto font-semibold">₹${amount.toFixed(2)}</span>`;
-                        suggestionsList.appendChild(li);
-                    });
-                    suggestionsContainer.appendChild(suggestionsList);
+                suggestionsContainer.innerHTML = '<h3 class="font-semibold text-lg text-gray-800 mb-2">Top Spending:</h3>';
+                const suggestionsList = document.createElement('ul');
+                suggestionsList.className = 'space-y-3';
+                sortedCategories.slice(0, 3).forEach(([category, amount]) => {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center text-gray-700';
+                    const iconInfo = categoryIcons[category] || categoryIcons['Other'];
+                    li.innerHTML = `<div class="icon-bg !w-8 !h-8 mr-3 ${iconInfo.color}">${iconInfo.svg.replace('width="24"','width="20"').replace('height="24"','height="20"')}</div> <span class="font-medium">${category}:</span> <span class="ml-auto font-semibold">₹${amount.toFixed(2)}</span>`;
+                    suggestionsList.appendChild(li);
+                });
+                suggestionsContainer.appendChild(suggestionsList);
                 }
 
 
@@ -679,7 +696,7 @@
                     .replace(/^\s*[\*]\s/gm, '<li class="flex items-start"><span class="mr-2 mt-1 text-purple-600 font-bold">&bull;</span><span>')
                     .replace(/$/gm, '</span></li>')
                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                container.innerHTML = `<h3 class="font-semibold text-lg text-gray-800 mb-2">${title}</h3><ul class="space-y-2 text-gray-700">${html}</ul>`;
+                 container.innerHTML = `<h3 class="font-semibold text-lg text-gray-800 mb-2">${title}</h3><ul class="space-y-2 text-gray-700">${html}</ul>`;
             }
 
             // --- Export ---
@@ -701,6 +718,115 @@
                 document.body.removeChild(link);
             }
             exportBtn.addEventListener('click', exportDataToCSV);
+
+            // --- Upload CSV ---
+            uploadCsvInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const csv = e.target.result;
+                    try {
+                        const parsedData = parseCSV(csv);
+                        updateStateFromCSV(parsedData);
+                        saveAndRender();
+                        showModal('Data uploaded successfully!', 'alert');
+                    } catch (error) {
+                        console.error('CSV parsing error:', error);
+                        showModal('Error uploading CSV: ' + error.message, 'alert');
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            function parseCSV(csv) {
+                const lines = csv.split('\n').filter(line => line.trim() !== '');
+                if (lines.length < 2) throw new Error('CSV must contain headers and at least one data row.');
+
+                const headers = lines[0].split(',').map(header => header.trim().replace(/^"|"$/g, ''));
+                const data = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    const values = parseCSVLine(lines[i]);
+                    if (values.length !== headers.length) {
+                        console.warn(`Skipping malformed row ${i + 1}: ${lines[i]}`);
+                        continue;
+                    }
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index];
+                    });
+                    data.push(row);
+                }
+                return data;
+            }
+
+            // Helper to parse a CSV line, handling quoted fields
+            function parseCSVLine(line) {
+                const values = [];
+                let inQuote = false;
+                let currentField = '';
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        if (inQuote && line[i + 1] === '"') { // Escaped double quote
+                            currentField += '"';
+                            i++;
+                        } else {
+                            inQuote = !inQuote;
+                        }
+                    } else if (char === ',') {
+                        if (inQuote) {
+                            currentField += char;
+                        } else {
+                            values.push(currentField);
+                            currentField = '';
+                        }
+                    } else {
+                        currentField += char;
+                    }
+                }
+                values.push(currentField);
+                return values.map(value => value.trim());
+            }
+
+
+            function updateStateFromCSV(data) {
+                // Clear existing state for a fresh upload
+                state.incomes = [];
+                state.expenses = [];
+                state.emis = [];
+
+                data.forEach(row => {
+                    const type = row['Type'] ? row['Type'].toLowerCase() : '';
+                    const name = row['Name'] || 'Unknown';
+                    const amount = parseFloat(row['Amount'] || 0);
+                    const date = row['Date'] || new Date().toISOString();
+
+                    if (isNaN(amount) || amount <= 0) {
+                        console.warn(`Skipping row due to invalid amount:`, row);
+                        return;
+                    }
+
+                    const transaction = { id: Date.now() + Math.random(), name, amount, type, date };
+
+                    if (type === 'income') {
+                        state.incomes.push(transaction);
+                    } else if (type === 'expense') {
+                        transaction.category = row['Category'] || 'Other';
+                        state.expenses.push(transaction);
+                    } else if (type === 'emi') {
+                        transaction.months = parseInt(row['Number of Months'] || 1);
+                        transaction.startDate = row['Start Date'] || new Date().toISOString().split('T')[0];
+                        if (isNaN(transaction.months) || transaction.months <= 0) {
+                             console.warn(`Skipping EMI row due to invalid months:`, row);
+                             return;
+                        }
+                        state.emis.push(transaction);
+                    }
+                });
+            }
 
             // Initial render
             render();
